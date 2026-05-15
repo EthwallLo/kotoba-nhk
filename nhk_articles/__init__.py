@@ -1,21 +1,33 @@
 from .scraper import (
     Article,
     DEFAULT_URL,
+    EASY_URL,
     build_article_api_url,
+    build_easy_article_url,
     enrich_articles_with_content,
     fetch_accountless_token,
     fetch_article_content,
     fetch_articles,
+    fetch_articles_for_site,
+    fetch_easy_articles,
     parse_articles,
+    parse_easy_article_content,
+    parse_easy_articles,
 )
 
 __all__ = [
     "Article",
     "DEFAULT_URL",
+    "EASY_URL",
     "build_article_api_url",
+    "build_easy_article_url",
     "enrich_articles_with_content",
     "fetch_accountless_token",
     "fetch_article_content",
     "fetch_articles",
+    "fetch_articles_for_site",
+    "fetch_easy_articles",
     "parse_articles",
+    "parse_easy_article_content",
+    "parse_easy_articles",
 ]

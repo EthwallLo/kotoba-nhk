@@ -5,16 +5,20 @@ import re
 from dataclasses import dataclass
 from http.cookiejar import Cookie, CookieJar
 from html.parser import HTMLParser
+from typing import Any
 from urllib.parse import quote, urlencode, urljoin, urlparse, urlunparse
 from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 
 DEFAULT_URL = "https://news.web.nhk/newsweb"
+EASY_URL = "https://news.web.nhk/news/easy/"
+EASY_LIST_URL = "https://news.web.nhk/news/easy/news-list.json"
 API_BASE_URL = "https://api.web.nhk/r8/t/newsarticle"
 AUTH_BASE_URL = "https://news.web.nhk/tix/build_authorize"
 
 ARTICLE_PATH_RE = re.compile(r"^/newsweb/[a-z]{2}/[a-z]{2}-[a-z0-9]+/?$")
 PUBLISHED_RE = re.compile(r"\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}")
 WHITESPACE_RE = re.compile(r"\s+")
+NEWS_TIME_SUFFIX_RE = re.compile(r"\s*\(\d{1,2}:\d{2}\)$")
 
 DEFAULT_CONSENT_AREA = {
     "areaId": "270",
@@ -28,6 +32,7 @@ DEFAULT_CONSENT_AREA = {
 class Article:
     title: str
     url: str
+    site: str = "news"
     published_at: str | None = None
     image_url: str | None = None
     content: str | None = None
@@ -52,6 +57,10 @@ def clean_content_text(value: str) -> str:
             paragraphs.append(paragraph)
 
     return "\n\n".join(paragraphs)
+
+
+def clean_news_title(value: str) -> str:
+    return NEWS_TIME_SUFFIX_RE.sub("", clean_text(value))
 
 
 def normalize_article_url(href: str | None, base_url: str) -> str | None:
@@ -79,6 +88,10 @@ def build_article_api_url(article_url: str) -> str | None:
 
     _, data_source_id, article_id = parts
     return f"{API_BASE_URL}/{data_source_id}/{article_id}.json"
+
+
+def build_easy_article_url(news_id: str) -> str:
+    return f"https://news.web.nhk/news/easy/{news_id}/{news_id}.html"
 
 
 class ArticleHTMLParser(HTMLParser):
@@ -154,6 +167,7 @@ class ArticleHTMLParser(HTMLParser):
                     title=title,
                     published_at=published_at,
                     url=url,
+                    site="news",
                     image_url=image_url,
                 )
             )
@@ -163,9 +177,9 @@ class ArticleHTMLParser(HTMLParser):
     def _pick_title(self, texts: list[str]) -> str:
         assert self._current is not None
 
-        excluded = {"動画", "ニュース", "配信中", "一覧へ", "もっと見る"}
+        excluded = {"動画", "ニュース", "配信中", "一覧へ", "もっと見る", "JUST IN"}
         candidates = [
-            text
+            clean_news_title(text)
             for text in texts
             if text not in excluded and not PUBLISHED_RE.fullmatch(text)
         ]
@@ -246,6 +260,17 @@ def fetch_json(
     return json.loads(fetch_text(url, timeout=timeout, headers=headers))
 
 
+def fetch_text_with_opener(
+    opener: Any,
+    url: str,
+    timeout: float = 20.0,
+    headers: dict[str, str] | None = None,
+) -> str:
+    with opener.open(make_request(url, headers=headers), timeout=timeout) as response:
+        charset = response.headers.get_content_charset() or "utf-8"
+        return response.read().decode(charset, errors="replace")
+
+
 def extract_text_value(value: object) -> str | None:
     if isinstance(value, str):
         return clean_text(value)
@@ -316,6 +341,75 @@ def update_article_from_detail(article: Article, payload: object, api_url: str) 
     return article
 
 
+class EasyArticleHTMLParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.paragraphs: list[str] = []
+        self._current: list[str] | None = None
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style", "rt", "rp"}:
+            self._skip_depth += 1
+            return
+        if tag == "p":
+            self._current = []
+
+    def handle_data(self, data: str) -> None:
+        if self._current is not None and self._skip_depth == 0:
+            self._current.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style", "rt", "rp"} and self._skip_depth:
+            self._skip_depth -= 1
+            return
+        if tag == "p" and self._current is not None:
+            text = clean_text("".join(self._current))
+            if text:
+                self.paragraphs.append(text)
+            self._current = None
+
+
+EASY_PUBLISHED_RE = re.compile(r"^\d{4}年\d{1,2}月\d{1,2}日\s+\d{1,2}時\d{1,2}分$")
+EASY_CONTENT_STOP_PREFIXES = (
+    "ニュースをさがす",
+    "がいこくごのニュース",
+    "NEWS WEB EASY publishes",
+    "「NHKやさしいことばニュース」は",
+    "NHK やさしいことばニュース",
+    "NHK AM・FM",
+    "Copyright NHK",
+)
+
+
+def parse_easy_article_content(html: str) -> tuple[str | None, str | None]:
+    parser = EasyArticleHTMLParser()
+    parser.feed(html)
+
+    published_at = None
+    content: list[str] = []
+    collecting = False
+
+    for paragraph in parser.paragraphs:
+        if paragraph in {"読みこみ中...", "読込中...", "読み込み中..."}:
+            continue
+
+        if not collecting and EASY_PUBLISHED_RE.fullmatch(paragraph):
+            published_at = paragraph
+            collecting = True
+            continue
+
+        if not collecting:
+            continue
+
+        if any(paragraph.startswith(prefix) for prefix in EASY_CONTENT_STOP_PREFIXES):
+            break
+
+        content.append(paragraph)
+
+    return published_at, "\n\n".join(content) if content else None
+
+
 def make_cookie(name: str, value: str, domain: str = ".web.nhk") -> Cookie:
     return Cookie(
         version=0,
@@ -347,11 +441,17 @@ def build_consent_cookie_value(area: dict[str, str] | None = None) -> str:
     return quote(json.dumps(consent, ensure_ascii=False, separators=(",", ":")), safe="")
 
 
-def fetch_accountless_token(
+@dataclass(slots=True)
+class AccountlessSession:
+    token: str
+    opener: Any
+
+
+def create_accountless_session(
     redirect_url: str = DEFAULT_URL,
     timeout: float = 20.0,
     area: dict[str, str] | None = None,
-) -> str:
+) -> AccountlessSession:
     cookie_jar = CookieJar()
     cookie_jar.set_cookie(make_cookie("consentToUse", build_consent_cookie_value(area)))
     opener = build_opener(HTTPCookieProcessor(cookie_jar))
@@ -369,9 +469,21 @@ def fetch_accountless_token(
 
     for cookie in cookie_jar:
         if cookie.name == "z_at":
-            return cookie.value
+            return AccountlessSession(token=cookie.value, opener=opener)
 
     raise RuntimeError("NHK accountless token was not returned.")
+
+
+def fetch_accountless_token(
+    redirect_url: str = DEFAULT_URL,
+    timeout: float = 20.0,
+    area: dict[str, str] | None = None,
+) -> str:
+    return create_accountless_session(
+        redirect_url=redirect_url,
+        timeout=timeout,
+        area=area,
+    ).token
 
 
 def fetch_article_content(
@@ -388,16 +500,105 @@ def fetch_article_content(
     return update_article_from_detail(article, payload, api_url)
 
 
+def parse_easy_articles(payload: object) -> list[Article]:
+    if not isinstance(payload, list):
+        return []
+
+    articles: list[Article] = []
+    for date_group in payload:
+        if not isinstance(date_group, dict):
+            continue
+
+        for _, items in date_group.items():
+            if not isinstance(items, list):
+                continue
+
+            for item in items:
+                if not isinstance(item, dict) or not item.get("news_display_flag", True):
+                    continue
+
+                news_id = extract_text_value(item.get("news_id"))
+                title = extract_text_value(item.get("title"))
+                if not news_id or not title:
+                    continue
+
+                image_url = (
+                    extract_text_value(item.get("news_easy_image_uri"))
+                    or extract_text_value(item.get("news_web_image_uri"))
+                )
+                article = Article(
+                    title=title,
+                    url=build_easy_article_url(news_id),
+                    site="easy",
+                    published_at=extract_text_value(item.get("news_prearranged_time")),
+                    image_url=image_url,
+                    api_url=EASY_LIST_URL,
+                    date_published=extract_text_value(item.get("news_publication_time")),
+                    date_modified=extract_text_value(item.get("news_publication_time")),
+                )
+                articles.append(article)
+
+    return deduplicate_articles(articles)
+
+
+def fetch_easy_articles(timeout: float = 20.0) -> list[Article]:
+    accountless_session = create_accountless_session(
+        redirect_url=EASY_URL,
+        timeout=timeout,
+    )
+    payload = fetch_json(
+        EASY_LIST_URL,
+        timeout=timeout,
+        headers={
+            "Authorization": f"Bearer {accountless_session.token}",
+            "Referer": EASY_URL,
+        },
+    )
+    return parse_easy_articles(payload)
+
+
+def fetch_easy_article_content(
+    article: Article,
+    accountless_session: AccountlessSession,
+    timeout: float = 20.0,
+) -> Article:
+    html = fetch_text_with_opener(
+        accountless_session.opener,
+        article.url,
+        timeout=timeout,
+        headers={"Referer": EASY_URL},
+    )
+    published_at, content = parse_easy_article_content(html)
+    article.published_at = published_at or article.published_at
+    article.content = content or article.content
+    article.content_is_truncated = not bool(content)
+    return article
+
+
 def enrich_articles_with_content(
     articles: list[Article], timeout: float = 20.0
 ) -> list[Article]:
+    if articles and articles[0].site == "easy":
+        accountless_session = create_accountless_session(
+            redirect_url=EASY_URL,
+            timeout=timeout,
+        )
+        return [
+            fetch_easy_article_content(
+                article,
+                accountless_session=accountless_session,
+                timeout=timeout,
+            )
+            for article in articles
+        ]
+
     accountless_token = None
     if articles:
         try:
-            accountless_token = fetch_accountless_token(
+            accountless_token = create_accountless_session(
                 redirect_url=articles[0].url,
                 timeout=timeout,
-            )
+            ).token
         except Exception:
             accountless_token = None
 
@@ -418,3 +619,15 @@ def fetch_html(url: str = DEFAULT_URL, timeout: float = 20.0) -> str:
 def fetch_articles(url: str = DEFAULT_URL, timeout: float = 20.0) -> list[Article]:
     html = fetch_html(url, timeout=timeout)
     return parse_articles(html, base_url=url)
+
+
+def fetch_articles_for_site(
+    site: str,
+    url: str | None = None,
+    timeout: float = 20.0,
+) -> list[Article]:
+    if site == "easy":
+        return fetch_easy_articles(timeout=timeout)
+    if site == "news":
+        return fetch_articles(url or DEFAULT_URL, timeout=timeout)
+    raise ValueError(f"Site inconnu: {site}")

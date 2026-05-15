@@ -1,11 +1,13 @@
-# Kotoba NHK News
+# Kotoba NHK
 
-Petit projet Python pour recuperer la liste des articles affiches sur
-<https://news.web.nhk/newsweb>.
+Petit projet Python pour recuperer les articles de :
+
+- NHK News Web : <https://news.web.nhk/newsweb>
+- NHK Easy : <https://news.web.nhk/news/easy/>
 
 Le scraper utilise uniquement la bibliotheque standard de Python. Il lit le HTML
-de la page NHK, extrait les liens d'articles `/newsweb/...`, dedoublonne les
-resultats, puis affiche le titre, l'heure de publication et l'URL.
+ou les endpoints JSON publics de NHK, dedoublonne les resultats, puis affiche le
+titre, l'heure de publication et l'URL.
 
 ## Utilisation rapide
 
@@ -13,39 +15,49 @@ resultats, puis affiche le titre, l'heure de publication et l'URL.
 python main.py
 ```
 
+Sans option, l'application propose de choisir le site au demarrage.
+
+Choisir le site sans prompt :
+
+```powershell
+python main.py --site news
+python main.py --site easy
+```
+
 Limiter le nombre d'articles :
 
 ```powershell
-python main.py --limit 10
+python main.py --site easy --limit 10
 ```
 
 Exporter en JSON :
 
 ```powershell
-python main.py --format json --output articles.json
+python main.py --site easy --format json --output articles.json
 ```
 
 Exporter en CSV :
 
 ```powershell
-python main.py --format csv --output articles.csv
+python main.py --site news --format csv --output articles.csv
 ```
 
 Recuperer aussi le contenu public expose par NHK pour chaque article :
 
 ```powershell
-python main.py --limit 5 --with-content
+python main.py --site news --limit 5 --with-content
+python main.py --site easy --limit 5 --with-content
 ```
 
 Le script tente d'abord d'obtenir le jeton `accountless` utilise par le site NHK
-pour lire `articleBody`. Si ce jeton n'est pas disponible, il revient au resume
-public. Dans les sorties JSON et CSV, `content_is_truncated` indique ce fallback
-tronque.
+pour lire `articleBody` sur News Web et les pages detaillees sur NHK Easy. Si ce
+jeton n'est pas disponible, il revient aux donnees publiques disponibles. Dans
+les sorties JSON et CSV, `content_is_truncated` indique ce fallback tronque.
 
 En JSON avec contenu :
 
 ```powershell
-python main.py --limit 5 --with-content --format json --output articles.json
+python main.py --site easy --limit 5 --with-content --format json --output articles.json
 ```
 
 ## Installation optionnelle
@@ -55,10 +67,30 @@ python -m pip install -e .
 nhk-articles --limit 10
 ```
 
+## Interface graphique C#
+
+Une petite interface Windows Forms est disponible dans `Kotoba.NhkGui`.
+Elle permet de choisir `Classique` ou `Easy`, de fixer une limite, puis
+d'afficher les articles dans une fenetre.
+
+```powershell
+dotnet run --project Kotoba.NhkGui/Kotoba.NhkGui.csproj
+```
+
+La fenetre lance le backend Python avec `python3 main.py --format json`.
+Avant de lancer l'interface, verifie donc que cette commande fonctionne dans le
+meme terminal :
+
+```powershell
+python3 --version
+```
+
+L'option `Charger contenu` demande aussi le texte des articles. Comme pour le
+script Python, NHK peut demander une session localisee au Japon pour certains
+contenus.
+
 ## Tests
 
 ```powershell
 python -m unittest discover -s tests
 ```
-# kotoba-nhk
-# kotoba-nhk

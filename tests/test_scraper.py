@@ -3,8 +3,11 @@ import unittest
 from nhk_articles.scraper import (
     Article,
     build_article_api_url,
+    build_easy_article_url,
     normalize_article_url,
     parse_articles,
+    parse_easy_article_content,
+    parse_easy_articles,
     update_article_from_detail,
 )
 
@@ -49,6 +52,22 @@ class ScraperTests(unittest.TestCase):
         self.assertEqual(articles[0].title, "大相撲夏場所6日目の見どころ")
         self.assertEqual(articles[0].image_url, "https://news.web.nhk/news/image.jpg")
 
+    def test_just_in_label_is_not_used_as_title(self) -> None:
+        html = """
+        <a href="/newsweb/na/na-k10015122481000">
+          <span>JUST IN</span>
+          <span>株価 一時1600円以上値下がり 利益確定売りや長期金利上昇で(15:13)</span>
+        </a>
+        """
+
+        articles = parse_articles(html)
+
+        self.assertEqual(len(articles), 1)
+        self.assertEqual(
+            articles[0].title,
+            "株価 一時1600円以上値下がり 利益確定売りや長期金利上昇で",
+        )
+
     def test_normalize_article_url_rejects_non_articles(self) -> None:
         self.assertIsNone(normalize_article_url("/newsweb/video", "https://news.web.nhk/newsweb"))
         self.assertIsNone(
@@ -59,6 +78,12 @@ class ScraperTests(unittest.TestCase):
         self.assertEqual(
             build_article_api_url("https://news.web.nhk/newsweb/na/na-k10015122111000"),
             "https://api.web.nhk/r8/t/newsarticle/na/na-k10015122111000.json",
+        )
+
+    def test_build_easy_article_url(self) -> None:
+        self.assertEqual(
+            build_easy_article_url("ne2026051413177"),
+            "https://news.web.nhk/news/easy/ne2026051413177/ne2026051413177.html",
         )
 
     def test_update_article_from_detail(self) -> None:
@@ -128,6 +153,51 @@ class ScraperTests(unittest.TestCase):
             "Premier paragraphe.\n\nDeuxieme paragraphe complet.",
         )
         self.assertFalse(updated.content_is_truncated)
+
+    def test_parse_easy_articles(self) -> None:
+        payload = [
+            {
+                "2026-05-14": [
+                    {
+                        "news_id": "ne2026051413177",
+                        "title": "トランプ大統領と習近平国家主席が会って話をした",
+                        "news_prearranged_time": "2026-05-14 20:15:00",
+                        "news_publication_time": "2026-05-14 20:32:28",
+                        "news_easy_image_uri": "",
+                        "news_web_image_uri": "https://news.web.nhk/news/example.jpg",
+                        "news_display_flag": True,
+                    }
+                ]
+            }
+        ]
+
+        articles = parse_easy_articles(payload)
+
+        self.assertEqual(len(articles), 1)
+        self.assertEqual(articles[0].site, "easy")
+        self.assertEqual(articles[0].title, "トランプ大統領と習近平国家主席が会って話をした")
+        self.assertEqual(articles[0].published_at, "2026-05-14 20:15:00")
+        self.assertEqual(
+            articles[0].url,
+            "https://news.web.nhk/news/easy/ne2026051413177/ne2026051413177.html",
+        )
+
+    def test_parse_easy_article_content_removes_ruby_and_footer(self) -> None:
+        html = """
+        <main>
+          <p>読み<ruby>こみ<rt>こ</rt></ruby>中...</p>
+          <p>2026年5月14日 20時15分</p>
+          <p>14日、<ruby>北京<rt>ぺきん</rt></ruby>で話をしました。</p>
+          <p>次の段落です。</p>
+          <p>ニュースをさがす</p>
+          <p>これはフッターです。</p>
+        </main>
+        """
+
+        published_at, content = parse_easy_article_content(html)
+
+        self.assertEqual(published_at, "2026年5月14日 20時15分")
+        self.assertEqual(content, "14日、北京で話をしました。\n\n次の段落です。")
 
 
 if __name__ == "__main__":
