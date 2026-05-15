@@ -1,9 +1,11 @@
 import unittest
+from datetime import date
 
 from nhk_articles.scraper import (
     Article,
     build_article_api_url,
     build_easy_article_url,
+    filter_articles_by_date,
     normalize_article_url,
     parse_articles,
     parse_easy_article_content,
@@ -198,6 +200,45 @@ class ScraperTests(unittest.TestCase):
 
         self.assertEqual(published_at, "2026年5月14日 20時15分")
         self.assertEqual(content, "14日、北京で話をしました。\n\n次の段落です。")
+
+
+    def test_filter_articles_by_date_matches_news_month_day(self) -> None:
+        articles = [
+            Article(
+                title="A",
+                url="https://news.web.nhk/newsweb/na/na-k10015122111000",
+                published_at="5\u670815\u65e5 5:31",
+            ),
+            Article(
+                title="B",
+                url="https://news.web.nhk/newsweb/na/na-k10015122121000",
+                published_at="5\u670814\u65e5 20:10",
+            ),
+        ]
+
+        filtered = filter_articles_by_date(articles, date(2026, 5, 15))
+
+        self.assertEqual([article.title for article in filtered], ["A"])
+
+    def test_filter_articles_by_date_matches_easy_iso_date(self) -> None:
+        articles = [
+            Article(
+                title="A",
+                url="https://news.web.nhk/news/easy/ne2026051413177/ne2026051413177.html",
+                site="easy",
+                published_at="2026-05-14 20:15:00",
+            ),
+            Article(
+                title="B",
+                url="https://news.web.nhk/news/easy/ne2026051513177/ne2026051513177.html",
+                site="easy",
+                published_at="2026-05-15 20:15:00",
+            ),
+        ]
+
+        filtered = filter_articles_by_date(articles, date(2026, 5, 15))
+
+        self.assertEqual([article.title for article in filtered], ["B"])
 
 
 if __name__ == "__main__":

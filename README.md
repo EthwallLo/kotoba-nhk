@@ -30,6 +30,13 @@ Limiter le nombre d'articles :
 python main.py --site easy --limit 10
 ```
 
+Recuperer les articles d'une date precise :
+
+```powershell
+python main.py --site news --date 2026-05-15
+python main.py --site easy --date 2026-05-15
+```
+
 Exporter en JSON :
 
 ```powershell
@@ -70,14 +77,14 @@ nhk-articles --limit 10
 ## Interface graphique C#
 
 Une petite interface Windows Forms est disponible dans `Kotoba.NhkGui`.
-Elle permet de choisir `Classique` ou `Easy`, de fixer une limite, puis
+Elle permet de choisir `Classique` ou `Easy`, de choisir une date, puis
 d'afficher les articles dans une fenetre.
 
 ```powershell
 dotnet run --project Kotoba.NhkGui/Kotoba.NhkGui.csproj
 ```
 
-La fenetre lance le backend Python avec `python3 main.py --format json`.
+La fenetre lance le backend Python avec `python3 main.py --date YYYY-MM-DD --format json`.
 Avant de lancer l'interface, verifie donc que cette commande fonctionne dans le
 meme terminal :
 

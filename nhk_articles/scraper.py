@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from datetime import date
 from http.cookiejar import Cookie, CookieJar
 from html.parser import HTMLParser
 from typing import Any
@@ -19,6 +20,13 @@ ARTICLE_PATH_RE = re.compile(r"^/newsweb/[a-z]{2}/[a-z]{2}-[a-z0-9]+/?$")
 PUBLISHED_RE = re.compile(r"\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}")
 WHITESPACE_RE = re.compile(r"\s+")
 NEWS_TIME_SUFFIX_RE = re.compile(r"\s*\(\d{1,2}:\d{2}\)$")
+ISO_DATE_RE = re.compile(r"(?P<year>\d{4})[-/](?P<month>\d{1,2})[-/](?P<day>\d{1,2})")
+JAPANESE_FULL_DATE_RE = re.compile(
+    r"(?P<year>\d{4})\u5e74(?P<month>\d{1,2})\u6708(?P<day>\d{1,2})\u65e5"
+)
+JAPANESE_MONTH_DAY_RE = re.compile(
+    r"(?P<month>\d{1,2})\u6708(?P<day>\d{1,2})\u65e5"
+)
 
 DEFAULT_CONSENT_AREA = {
     "areaId": "270",
@@ -226,6 +234,53 @@ def deduplicate_articles(articles: list[Article]) -> list[Article]:
             existing.title = article.title
 
     return list(deduplicated.values())
+
+
+def article_matches_date(article: Article, target_date: date) -> bool:
+    candidates = (
+        article.published_at,
+        article.date_published,
+        article.date_modified,
+        article.url,
+    )
+    return any(text_matches_date(candidate, target_date) for candidate in candidates if candidate)
+
+
+def filter_articles_by_date(articles: list[Article], target_date: date) -> list[Article]:
+    return [article for article in articles if article_matches_date(article, target_date)]
+
+
+def text_matches_date(value: str, target_date: date) -> bool:
+    full_date = JAPANESE_FULL_DATE_RE.search(value)
+    if full_date:
+        return date_parts_match(
+            target_date,
+            year=int(full_date.group("year")),
+            month=int(full_date.group("month")),
+            day=int(full_date.group("day")),
+        )
+
+    iso_date = ISO_DATE_RE.search(value)
+    if iso_date:
+        return date_parts_match(
+            target_date,
+            year=int(iso_date.group("year")),
+            month=int(iso_date.group("month")),
+            day=int(iso_date.group("day")),
+        )
+
+    month_day = JAPANESE_MONTH_DAY_RE.search(value)
+    if month_day:
+        return (
+            int(month_day.group("month")) == target_date.month
+            and int(month_day.group("day")) == target_date.day
+        )
+
+    return False
+
+
+def date_parts_match(target_date: date, year: int, month: int, day: int) -> bool:
+    return target_date.year == year and target_date.month == month and target_date.day == day
 
 
 def make_request(url: str, headers: dict[str, str] | None = None) -> Request:

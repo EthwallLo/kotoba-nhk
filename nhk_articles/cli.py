@@ -5,6 +5,7 @@ import csv
 import io
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Iterable
 
@@ -14,6 +15,7 @@ from .scraper import (
     EASY_URL,
     enrich_articles_with_content,
     fetch_articles_for_site,
+    filter_articles_by_date,
 )
 
 SITE_LABELS = {
@@ -44,6 +46,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Nombre maximum d'articles a afficher.",
     )
     parser.add_argument(
+        "--date",
+        type=parse_date_argument,
+        default=None,
+        help="Date des articles a recuperer, au format YYYY-MM-DD.",
+    )
+    parser.add_argument(
         "--format",
         "-f",
         choices=("table", "json", "csv"),
@@ -68,6 +76,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Timeout HTTP en secondes.",
     )
     return parser
+
+
+def parse_date_argument(value: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "--date doit utiliser le format YYYY-MM-DD."
+        ) from exc
 
 
 def infer_site_from_url(url: str | None) -> str | None:
@@ -208,6 +225,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.limit is not None:
         if args.limit < 0:
             parser.error("--limit doit etre positif.")
+
+    if args.date is not None:
+        articles = filter_articles_by_date(articles, args.date)
+
+    if args.limit is not None:
         articles = articles[: args.limit]
 
     if args.with_content:

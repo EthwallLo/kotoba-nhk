@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
@@ -39,24 +40,52 @@ internal sealed class NhkArticle
     public string? DateModified { get; set; }
 }
 
+internal static class UiPalette
+{
+    public static readonly Color Window = Color.FromArgb(249, 246, 255);
+    public static readonly Color Panel = Color.FromArgb(255, 253, 255);
+    public static readonly Color Toolbar = Color.FromArgb(240, 234, 255);
+    public static readonly Color Lavender = Color.FromArgb(220, 209, 255);
+    public static readonly Color LavenderSoft = Color.FromArgb(232, 224, 255);
+    public static readonly Color LavenderWash = Color.FromArgb(247, 244, 255);
+    public static readonly Color LavenderDark = Color.FromArgb(132, 104, 190);
+    public static readonly Color Mint = Color.FromArgb(203, 238, 226);
+    public static readonly Color MintWash = Color.FromArgb(242, 252, 248);
+    public static readonly Color Peach = Color.FromArgb(255, 226, 216);
+    public static readonly Color PeachDark = Color.FromArgb(211, 132, 112);
+    public static readonly Color Rose = Color.FromArgb(255, 220, 236);
+    public static readonly Color Candy = Color.FromArgb(215, 191, 255);
+    public static readonly Color Sky = Color.FromArgb(224, 240, 255);
+    public static readonly Color Text = Color.FromArgb(49, 43, 68);
+    public static readonly Color MutedText = Color.FromArgb(105, 91, 132);
+    public static readonly Color Border = Color.FromArgb(219, 208, 242);
+}
+
 internal sealed class MainForm : Form
 {
     private readonly NhkClient _client = new();
     private readonly ComboBox _siteCombo = new();
-    private readonly NumericUpDown _limitInput = new();
+    private readonly DateTimePicker _dateInput = new();
     private readonly CheckBox _contentCheck = new();
     private readonly Button _loadButton = new();
     private readonly Button _openButton = new();
     private readonly DataGridView _articlesGrid = new();
     private readonly TextBox _contentText = new();
+    private readonly TabControl _vocabularyTabs = new();
+    private readonly ListBox _verbList = new();
+    private readonly ListBox _properNounList = new();
+    private readonly ListBox _otherWordList = new();
     private readonly ToolStripStatusLabel _statusLabel = new();
     private BindingList<ArticleRow> _rows = new();
 
     public MainForm()
     {
         Text = "Kotoba NHK";
-        MinimumSize = new Size(980, 640);
+        MinimumSize = new Size(1180, 720);
+        ClientSize = new Size(1280, 760);
         StartPosition = FormStartPosition.CenterScreen;
+        BackColor = UiPalette.Window;
+        Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
 
         BuildLayout();
     }
@@ -68,70 +97,109 @@ internal sealed class MainForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Padding = new Padding(10)
+            Padding = new Padding(14),
+            BackColor = UiPalette.Window
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
 
-        var toolbar = new FlowLayoutPanel
+        var toolbar = new KawaiiToolbarPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            AutoSize = false
+            AutoSize = false,
+            Padding = new Padding(16, 15, 16, 12),
+            BackColor = UiPalette.Window
         };
+
+        toolbar.Controls.Add(new Label
+        {
+            Text = "Kotoba NHK",
+            AutoSize = true,
+            Font = new Font("Segoe UI Semibold", 15F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = UiPalette.Text,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0, 5, 10, 0)
+        });
+
+        toolbar.Controls.Add(new Label
+        {
+            Text = "pastel news desk",
+            AutoSize = true,
+            Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point),
+            ForeColor = UiPalette.LavenderDark,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0, 11, 28, 0)
+        });
 
         toolbar.Controls.Add(new Label
         {
             Text = "Site",
             AutoSize = true,
+            ForeColor = UiPalette.MutedText,
             TextAlign = ContentAlignment.MiddleLeft,
-            Margin = new Padding(0, 9, 8, 0)
+            Margin = new Padding(0, 10, 8, 0)
         });
 
         _siteCombo.DropDownStyle = ComboBoxStyle.DropDownList;
         _siteCombo.Width = 160;
+        _siteCombo.BackColor = UiPalette.Panel;
+        _siteCombo.ForeColor = UiPalette.Text;
+        _siteCombo.FlatStyle = FlatStyle.Flat;
         _siteCombo.Items.Add("Classique");
         _siteCombo.Items.Add("Easy");
         _siteCombo.SelectedIndex = 0;
-        _siteCombo.Margin = new Padding(0, 5, 18, 0);
+        _siteCombo.Margin = new Padding(0, 6, 18, 0);
         toolbar.Controls.Add(_siteCombo);
 
         toolbar.Controls.Add(new Label
         {
-            Text = "Limite",
+            Text = "Date",
             AutoSize = true,
+            ForeColor = UiPalette.MutedText,
             TextAlign = ContentAlignment.MiddleLeft,
-            Margin = new Padding(0, 9, 8, 0)
+            Margin = new Padding(0, 10, 8, 0)
         });
 
-        _limitInput.Minimum = 1;
-        _limitInput.Maximum = 200;
-        _limitInput.Value = 20;
-        _limitInput.Width = 70;
-        _limitInput.Margin = new Padding(0, 5, 18, 0);
-        toolbar.Controls.Add(_limitInput);
+        _dateInput.Format = DateTimePickerFormat.Custom;
+        _dateInput.CustomFormat = "yyyy-MM-dd";
+        _dateInput.Width = 128;
+        _dateInput.Value = DateTime.Today;
+        _dateInput.BackColor = UiPalette.Panel;
+        _dateInput.ForeColor = UiPalette.Text;
+        _dateInput.CalendarMonthBackground = UiPalette.Panel;
+        _dateInput.CalendarTitleBackColor = UiPalette.Lavender;
+        _dateInput.CalendarTitleForeColor = UiPalette.Text;
+        _dateInput.CalendarTrailingForeColor = UiPalette.MutedText;
+        _dateInput.Margin = new Padding(0, 6, 18, 0);
+        toolbar.Controls.Add(_dateInput);
 
         _contentCheck.Text = "Charger contenu";
         _contentCheck.AutoSize = true;
-        _contentCheck.Margin = new Padding(0, 8, 18, 0);
+        _contentCheck.ForeColor = UiPalette.Text;
+        _contentCheck.BackColor = UiPalette.Toolbar;
+        _contentCheck.Margin = new Padding(0, 10, 18, 0);
         toolbar.Controls.Add(_contentCheck);
 
         _loadButton.Text = "Recuperer";
-        _loadButton.AutoSize = true;
-        _loadButton.Margin = new Padding(0, 4, 8, 0);
+        StylePastelButton(_loadButton, UiPalette.Lavender, 132);
+        _loadButton.Margin = new Padding(0, 3, 8, 0);
         _loadButton.Click += async (_, _) => await LoadArticlesAsync();
         toolbar.Controls.Add(_loadButton);
 
         _openButton.Text = "Ouvrir";
-        _openButton.AutoSize = true;
+        StylePastelButton(_openButton, UiPalette.LavenderSoft, 108);
         _openButton.Enabled = false;
-        _openButton.Margin = new Padding(0, 4, 0, 0);
+        _openButton.Margin = new Padding(0, 3, 0, 0);
         _openButton.Click += (_, _) => OpenSelectedArticle();
         toolbar.Controls.Add(_openButton);
 
         _articlesGrid.Dock = DockStyle.Fill;
+        _articlesGrid.BackgroundColor = UiPalette.Panel;
+        _articlesGrid.BorderStyle = BorderStyle.None;
+        _articlesGrid.GridColor = UiPalette.Border;
         _articlesGrid.ReadOnly = true;
         _articlesGrid.AllowUserToAddRows = false;
         _articlesGrid.AllowUserToDeleteRows = false;
@@ -141,6 +209,20 @@ internal sealed class MainForm : Form
         _articlesGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _articlesGrid.RowHeadersVisible = false;
         _articlesGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        _articlesGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        _articlesGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+        _articlesGrid.EnableHeadersVisualStyles = false;
+        _articlesGrid.RowTemplate.Height = 34;
+        _articlesGrid.ColumnHeadersHeight = 38;
+        _articlesGrid.ColumnHeadersDefaultCellStyle.BackColor = UiPalette.Lavender;
+        _articlesGrid.ColumnHeadersDefaultCellStyle.ForeColor = UiPalette.Text;
+        _articlesGrid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold, GraphicsUnit.Point);
+        _articlesGrid.DefaultCellStyle.BackColor = UiPalette.Panel;
+        _articlesGrid.DefaultCellStyle.ForeColor = UiPalette.Text;
+        _articlesGrid.DefaultCellStyle.SelectionBackColor = UiPalette.LavenderSoft;
+        _articlesGrid.DefaultCellStyle.SelectionForeColor = UiPalette.Text;
+        _articlesGrid.DefaultCellStyle.Padding = new Padding(8, 0, 8, 0);
+        _articlesGrid.AlternatingRowsDefaultCellStyle.BackColor = UiPalette.LavenderWash;
         _articlesGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             HeaderText = "Date",
@@ -169,18 +251,43 @@ internal sealed class MainForm : Form
         _contentText.ReadOnly = true;
         _contentText.ScrollBars = ScrollBars.Vertical;
         _contentText.Font = new Font("Yu Gothic UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
-        _contentText.BackColor = SystemColors.Window;
+        _contentText.BackColor = UiPalette.Panel;
+        _contentText.ForeColor = UiPalette.Text;
+        _contentText.BorderStyle = BorderStyle.FixedSingle;
+
+        var detailLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = UiPalette.Window
+        };
+        detailLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 66F));
+        detailLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34F));
+        detailLayout.Controls.Add(_contentText, 0, 0);
+        detailLayout.Controls.Add(CreateVocabularyPanel(), 1, 0);
 
         var split = new SplitContainer
         {
             Dock = DockStyle.Fill,
-            Orientation = Orientation.Horizontal
+            Orientation = Orientation.Horizontal,
+            BackColor = UiPalette.Window,
+            SplitterWidth = 8
         };
         split.Panel1.Controls.Add(_articlesGrid);
-        split.Panel2.Controls.Add(_contentText);
+        split.Panel2.Controls.Add(detailLayout);
+        split.Panel1.Padding = new Padding(0, 8, 0, 4);
+        split.Panel2.Padding = new Padding(0, 4, 0, 0);
 
-        var status = new StatusStrip { Dock = DockStyle.Fill };
+        var status = new StatusStrip
+        {
+            Dock = DockStyle.Fill,
+            BackColor = UiPalette.LavenderWash,
+            ForeColor = UiPalette.MutedText,
+            SizingGrip = false
+        };
         _statusLabel.Text = "Pret.";
+        _statusLabel.ForeColor = UiPalette.MutedText;
         status.Items.Add(_statusLabel);
 
         root.Controls.Add(toolbar, 0, 0);
@@ -189,6 +296,77 @@ internal sealed class MainForm : Form
         Controls.Add(root);
 
         _articlesGrid.DataSource = _rows;
+        _statusLabel.Text = $"Pret pour le {SelectedDateText()}.";
+        UpdateVocabulary(null);
+    }
+
+    private Control CreateVocabularyPanel()
+    {
+        var panel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(10, 0, 0, 0),
+            BackColor = UiPalette.Window
+        };
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var title = new Label
+        {
+            Text = "Vocabulaire",
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI Semibold", 11F, FontStyle.Bold, GraphicsUnit.Point),
+            ForeColor = UiPalette.LavenderDark,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        _vocabularyTabs.Dock = DockStyle.Fill;
+        _vocabularyTabs.Font = new Font("Segoe UI", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
+        _vocabularyTabs.Controls.Add(CreateVocabularyTab("Verbes", _verbList, UiPalette.LavenderWash));
+        _vocabularyTabs.Controls.Add(CreateVocabularyTab("Noms propres", _properNounList, UiPalette.MintWash));
+        _vocabularyTabs.Controls.Add(CreateVocabularyTab("Autres", _otherWordList, UiPalette.Panel));
+
+        panel.Controls.Add(title, 0, 0);
+        panel.Controls.Add(_vocabularyTabs, 0, 1);
+        return panel;
+    }
+
+    private static TabPage CreateVocabularyTab(string title, ListBox listBox, Color background)
+    {
+        var tab = new TabPage(title)
+        {
+            BackColor = background,
+            Padding = new Padding(8)
+        };
+
+        listBox.Dock = DockStyle.Fill;
+        listBox.BorderStyle = BorderStyle.None;
+        listBox.BackColor = background;
+        listBox.ForeColor = UiPalette.Text;
+        listBox.Font = new Font("Yu Gothic UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
+        listBox.HorizontalScrollbar = true;
+        listBox.IntegralHeight = false;
+
+        tab.Controls.Add(listBox);
+        return tab;
+    }
+
+    private static void StylePastelButton(Button button, Color fillColor, int width)
+    {
+        button.AutoSize = false;
+        button.Size = new Size(width, 34);
+        button.MinimumSize = new Size(width, 34);
+        button.BackColor = fillColor;
+        button.ForeColor = UiPalette.Text;
+        button.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold, GraphicsUnit.Point);
+        button.FlatStyle = FlatStyle.Flat;
+        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.BorderColor = UiPalette.LavenderDark;
+        button.UseVisualStyleBackColor = false;
+        button.Cursor = Cursors.Hand;
+        button.TextAlign = ContentAlignment.MiddleCenter;
     }
 
     private async Task LoadArticlesAsync()
@@ -196,20 +374,21 @@ internal sealed class MainForm : Form
         _loadButton.Enabled = false;
         _openButton.Enabled = false;
         _contentText.Clear();
+        UpdateVocabulary(null);
         _rows = new BindingList<ArticleRow>();
         _articlesGrid.DataSource = _rows;
 
         var site = _siteCombo.SelectedIndex == 1 ? NhkSite.Easy : NhkSite.News;
-        var limit = (int)_limitInput.Value;
+        var targetDate = DateOnly.FromDateTime(_dateInput.Value.Date);
         var includeContent = _contentCheck.Checked;
         var progress = new Progress<string>(message => _statusLabel.Text = message);
 
         try
         {
-            var articles = await _client.FetchArticlesAsync(site, limit, includeContent, progress);
+            var articles = await _client.FetchArticlesAsync(site, targetDate, includeContent, progress);
             _rows = new BindingList<ArticleRow>(articles.Select(ArticleRow.FromArticle).ToList());
             _articlesGrid.DataSource = _rows;
-            _statusLabel.Text = $"{_rows.Count} article(s) charges.";
+            _statusLabel.Text = $"{_rows.Count} article(s) pour le {SelectedDateText()}.";
 
             if (_rows.Count > 0)
             {
@@ -228,6 +407,11 @@ internal sealed class MainForm : Form
         }
     }
 
+    private string SelectedDateText()
+    {
+        return DateOnly.FromDateTime(_dateInput.Value.Date).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    }
+
     private void ShowSelectedArticle()
     {
         var row = CurrentRow();
@@ -236,6 +420,7 @@ internal sealed class MainForm : Form
         if (row is null)
         {
             _contentText.Clear();
+            UpdateVocabulary(null);
             return;
         }
 
@@ -269,6 +454,55 @@ internal sealed class MainForm : Form
         _contentText.Text = builder.ToString();
         _contentText.SelectionStart = 0;
         _contentText.SelectionLength = 0;
+        UpdateVocabulary(article);
+    }
+
+    private void UpdateVocabulary(NhkArticle? article)
+    {
+        _verbList.Items.Clear();
+        _properNounList.Items.Clear();
+        _otherWordList.Items.Clear();
+
+        if (article is null)
+        {
+            AddPlaceholder(_otherWordList, "Selectionne un article.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(article.Content))
+        {
+            AddPlaceholder(_verbList, "Coche Charger contenu.");
+            AddPlaceholder(_properNounList, "Coche Charger contenu.");
+            AddPlaceholder(_otherWordList, "Le vocabulaire utilise le texte complet.");
+            return;
+        }
+
+        var vocabulary = VocabularyExtractor.Extract(article.Content);
+        FillVocabularyList(_verbList, vocabulary.Verbs, "Aucun verbe repere.");
+        FillVocabularyList(_properNounList, vocabulary.ProperNouns, "Aucun nom propre repere.");
+        FillVocabularyList(_otherWordList, vocabulary.OtherWords, "Aucun mot repere.");
+    }
+
+    private static void FillVocabularyList(
+        ListBox listBox,
+        IReadOnlyList<VocabularyEntry> entries,
+        string emptyMessage)
+    {
+        if (entries.Count == 0)
+        {
+            AddPlaceholder(listBox, emptyMessage);
+            return;
+        }
+
+        foreach (var entry in entries)
+        {
+            listBox.Items.Add(entry.Count > 1 ? $"{entry.Word}  ({entry.Count})" : entry.Word);
+        }
+    }
+
+    private static void AddPlaceholder(ListBox listBox, string message)
+    {
+        listBox.Items.Add(message);
     }
 
     private void OpenSelectedArticle()
@@ -304,6 +538,240 @@ internal sealed class MainForm : Form
                 Article = article
             };
         }
+    }
+}
+
+internal sealed class KawaiiToolbarPanel : FlowLayoutPanel
+{
+    public KawaiiToolbarPanel()
+    {
+        DoubleBuffered = true;
+        SetStyle(
+            ControlStyles.AllPaintingInWmPaint
+            | ControlStyles.OptimizedDoubleBuffer
+            | ControlStyles.ResizeRedraw,
+            true);
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        e.Graphics.Clear(Parent?.BackColor ?? UiPalette.Window);
+
+        var bounds = Rectangle.Inflate(ClientRectangle, -1, -1);
+        using var path = RoundedRectangle(bounds, 16);
+        using var shadow = RoundedRectangle(new Rectangle(bounds.X, bounds.Y + 2, bounds.Width, bounds.Height), 16);
+        using var shadowBrush = new SolidBrush(Color.FromArgb(45, UiPalette.LavenderDark));
+        using var fillBrush = new SolidBrush(UiPalette.Toolbar);
+        using var borderPen = new Pen(UiPalette.Lavender, 1.4F);
+
+        e.Graphics.FillPath(shadowBrush, shadow);
+        e.Graphics.FillPath(fillBrush, path);
+        e.Graphics.DrawPath(borderPen, path);
+
+        using var dotBrush = new SolidBrush(Color.FromArgb(130, UiPalette.Candy));
+        e.Graphics.FillEllipse(dotBrush, bounds.Right - 54, bounds.Top + 14, 7, 7);
+        e.Graphics.FillEllipse(dotBrush, bounds.Right - 31, bounds.Top + 32, 5, 5);
+
+        using var mintBrush = new SolidBrush(Color.FromArgb(150, UiPalette.Mint));
+        e.Graphics.FillEllipse(mintBrush, bounds.Right - 72, bounds.Top + 35, 6, 6);
+    }
+
+    private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
+    {
+        var path = new GraphicsPath();
+        var diameter = radius * 2;
+        var arc = new Rectangle(bounds.Location, new Size(diameter, diameter));
+
+        path.AddArc(arc, 180, 90);
+        arc.X = bounds.Right - diameter;
+        path.AddArc(arc, 270, 90);
+        arc.Y = bounds.Bottom - diameter;
+        path.AddArc(arc, 0, 90);
+        arc.X = bounds.Left;
+        path.AddArc(arc, 90, 90);
+        path.CloseFigure();
+
+        return path;
+    }
+}
+
+internal sealed record VocabularyEntry(string Word, int Count);
+
+internal sealed record VocabularyResult(
+    IReadOnlyList<VocabularyEntry> Verbs,
+    IReadOnlyList<VocabularyEntry> ProperNouns,
+    IReadOnlyList<VocabularyEntry> OtherWords);
+
+internal static class VocabularyExtractor
+{
+    private const int MaxItemsPerCategory = 80;
+    private const string Kanji = @"\u3400-\u9FFF\uF900-\uFAFF\u3005\u30F6";
+    private const string Hiragana = @"\u3041-\u309F";
+    private const string Katakana = @"\u30A1-\u30FA\u30FC";
+    private static readonly Regex KatakanaWordRegex = new($@"[{Katakana}]{{3,}}", RegexOptions.Compiled);
+    private static readonly Regex ProperWithTitleRegex = new(
+        $@"[{Kanji}]{{2,8}}(?:\u3055\u3093|\u6C0F|\u9996\u76F8|\u5927\u7D71\u9818|\u77E5\u4E8B|\u5E02\u9577|\u753A\u9577|\u6751\u9577|\u8B70\u54E1|\u9078\u624B|\u76E3\u7763|\u793E\u9577|\u4F1A\u9577|\u6559\u6388|\u9577\u5B98|\u56FD\u5BB6\u4E3B\u5E2D|\u5BB9\u7591\u8005)",
+        RegexOptions.Compiled);
+    private static readonly Regex PlaceOrOrgRegex = new(
+        $@"[{Kanji}]{{2,10}}(?:\u90FD|\u9053|\u5E9C|\u770C|\u5E02|\u533A|\u753A|\u6751|\u56FD|\u7701|\u5E81|\u515A|\u5927\u5B66|\u4F1A\u793E|\u9280\u884C|\u7A7A\u6E2F|\u99C5|\u8B66\u5BDF)",
+        RegexOptions.Compiled);
+    private static readonly Regex VerbCandidateRegex = new(
+        $@"[{Kanji}{Hiragana}]{{2,18}}(?:\u3055\u308C\u3066|\u3055\u308C\u305F|\u3055\u308C\u308B|\u3057\u307E\u3057\u305F|\u3057\u307E\u3059|\u3057\u3066|\u3057\u305F|\u3059\u308B|\u3089\u308C\u3066|\u3089\u308C\u305F|\u3089\u308C\u308B|\u308C\u3066|\u308C\u305F|\u308C\u308B|\u306A\u304B\u3063\u305F|\u306A\u3044|\u307E\u3057\u305F|\u307E\u3059|\u307E\u305B\u3093|\u3066\u3044\u305F|\u3066\u3044\u308B|\u3044\u305F|\u3044\u308B|\u305F|\u3066|\u308B|\u3046|\u304F|\u3050|\u3059|\u3064|\u306C|\u3076|\u3080)",
+        RegexOptions.Compiled);
+    private static readonly Regex KanjiCompoundRegex = new($@"[{Kanji}]{{2,10}}", RegexOptions.Compiled);
+    private static readonly Regex JapaneseRunRegex = new($@"[{Kanji}{Hiragana}{Katakana}]+", RegexOptions.Compiled);
+
+    private static readonly string[] Particles =
+    {
+        "\u304B\u3089", "\u307E\u3067", "\u3088\u308A", "\u306A\u3069", "\u3067\u306F", "\u306B\u306F",
+        "\u3068\u306F", "\u306E", "\u306F", "\u304C", "\u3092", "\u306B", "\u3067", "\u3068", "\u3082", "\u3078"
+    };
+
+    private static readonly HashSet<string> StopWords = new(StringComparer.Ordinal)
+    {
+        "\u3053\u308C", "\u305D\u308C", "\u3042\u308C", "\u3053\u3068", "\u3082\u306E", "\u305F\u3081",
+        "\u3088\u3046", "\u3055\u3093", "\u3059\u308B", "\u3057\u305F", "\u3057\u3066", "\u3044\u308B",
+        "\u3044\u305F", "\u307E\u3059", "\u3067\u3059", "\u306A\u3044"
+    };
+
+    public static VocabularyResult Extract(string text)
+    {
+        var properNouns = new Dictionary<string, int>(StringComparer.Ordinal);
+        var verbs = new Dictionary<string, int>(StringComparer.Ordinal);
+        var otherWords = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        AddMatches(properNouns, text, KatakanaWordRegex, CleanVocabularyWord);
+        AddMatches(properNouns, text, ProperWithTitleRegex, CleanProperNoun);
+        AddMatches(properNouns, text, PlaceOrOrgRegex, CleanVocabularyWord);
+        AddMatches(verbs, text, VerbCandidateRegex, CleanVerbCandidate);
+        AddMatches(otherWords, text, KanjiCompoundRegex, CleanVocabularyWord);
+        AddMatches(otherWords, text, KatakanaWordRegex, CleanVocabularyWord);
+
+        RemoveCategoryOverlap(otherWords, properNouns);
+        RemoveCategoryOverlap(otherWords, verbs);
+        RemoveCategoryOverlap(verbs, properNouns);
+
+        return new VocabularyResult(
+            ToEntries(verbs),
+            ToEntries(properNouns),
+            ToEntries(otherWords));
+    }
+
+    private static void AddMatches(
+        IDictionary<string, int> target,
+        string text,
+        Regex regex,
+        Func<string, string?> normalizer)
+    {
+        foreach (Match match in regex.Matches(text))
+        {
+            var word = normalizer(match.Value);
+            if (!IsUsefulWord(word))
+            {
+                continue;
+            }
+
+            target[word!] = target.TryGetValue(word!, out var count) ? count + 1 : 1;
+        }
+    }
+
+    private static string? CleanProperNoun(string value)
+    {
+        var word = CleanVocabularyWord(value);
+        if (word is null)
+        {
+            return null;
+        }
+
+        foreach (var suffix in new[]
+        {
+            "\u3055\u3093", "\u6C0F", "\u9996\u76F8", "\u5927\u7D71\u9818", "\u77E5\u4E8B",
+            "\u5E02\u9577", "\u753A\u9577", "\u6751\u9577", "\u8B70\u54E1", "\u9078\u624B",
+            "\u76E3\u7763", "\u793E\u9577", "\u4F1A\u9577", "\u6559\u6388", "\u9577\u5B98",
+            "\u56FD\u5BB6\u4E3B\u5E2D", "\u5BB9\u7591\u8005"
+        })
+        {
+            if (word.EndsWith(suffix, StringComparison.Ordinal) && word.Length > suffix.Length + 1)
+            {
+                return word[..^suffix.Length];
+            }
+        }
+
+        return word;
+    }
+
+    private static string? CleanVerbCandidate(string value)
+    {
+        var word = CleanVocabularyWord(value);
+        if (word is null)
+        {
+            return null;
+        }
+
+        foreach (var particle in Particles)
+        {
+            var index = word.LastIndexOf(particle, StringComparison.Ordinal);
+            if (index >= 0 && index + particle.Length < word.Length - 1)
+            {
+                word = word[(index + particle.Length)..];
+            }
+        }
+
+        if (!ContainsAny(word, Hiragana) || word.Length < 2 || word.Length > 16)
+        {
+            return null;
+        }
+
+        return word;
+    }
+
+    private static string? CleanVocabularyWord(string value)
+    {
+        var word = value.Trim();
+        word = Regex.Replace(word, @"[\s\u3000]+", "");
+        return word;
+    }
+
+    private static bool IsUsefulWord(string? word)
+    {
+        if (string.IsNullOrWhiteSpace(word))
+        {
+            return false;
+        }
+
+        if (word.Length < 2 || StopWords.Contains(word))
+        {
+            return false;
+        }
+
+        return JapaneseRunRegex.IsMatch(word);
+    }
+
+    private static void RemoveCategoryOverlap(
+        IDictionary<string, int> lowerPriority,
+        IDictionary<string, int> higherPriority)
+    {
+        foreach (var word in higherPriority.Keys)
+        {
+            lowerPriority.Remove(word);
+        }
+    }
+
+    private static IReadOnlyList<VocabularyEntry> ToEntries(IDictionary<string, int> counts)
+    {
+        return counts
+            .OrderByDescending(item => item.Value)
+            .ThenBy(item => item.Key.Length)
+            .ThenBy(item => item.Key, StringComparer.Ordinal)
+            .Take(MaxItemsPerCategory)
+            .Select(item => new VocabularyEntry(item.Key, item.Value))
+            .ToList();
+    }
+
+    private static bool ContainsAny(string value, string unicodeRange)
+    {
+        return Regex.IsMatch(value, $"[{unicodeRange}]");
     }
 }
 
@@ -344,17 +812,17 @@ internal sealed class NhkClient : IDisposable
 
     public async Task<List<NhkArticle>> FetchArticlesAsync(
         NhkSite site,
-        int limit,
+        DateOnly targetDate,
         bool includeContent,
         IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        return await FetchArticlesWithPythonAsync(site, limit, includeContent, progress, cancellationToken);
+        return await FetchArticlesWithPythonAsync(site, targetDate, includeContent, progress, cancellationToken);
     }
 
     private static async Task<List<NhkArticle>> FetchArticlesWithPythonAsync(
         NhkSite site,
-        int limit,
+        DateOnly targetDate,
         bool includeContent,
         IProgress<string>? progress,
         CancellationToken cancellationToken)
@@ -363,7 +831,8 @@ internal sealed class NhkClient : IDisposable
         var projectRoot = FindProjectRoot();
         var siteArgument = site == NhkSite.Easy ? "easy" : "news";
 
-        progress?.Report($"Lancement de {pythonCommand} main.py...");
+        var dateArgument = targetDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        progress?.Report($"Lancement de {pythonCommand} main.py pour {dateArgument}...");
 
         var startInfo = new ProcessStartInfo
         {
@@ -379,8 +848,8 @@ internal sealed class NhkClient : IDisposable
         startInfo.ArgumentList.Add("main.py");
         startInfo.ArgumentList.Add("--site");
         startInfo.ArgumentList.Add(siteArgument);
-        startInfo.ArgumentList.Add("--limit");
-        startInfo.ArgumentList.Add(limit.ToString(CultureInfo.InvariantCulture));
+        startInfo.ArgumentList.Add("--date");
+        startInfo.ArgumentList.Add(dateArgument);
         startInfo.ArgumentList.Add("--format");
         startInfo.ArgumentList.Add("json");
 
