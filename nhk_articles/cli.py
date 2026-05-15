@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-from .scraper import Article, DEFAULT_URL, fetch_articles
+from .scraper import Article, DEFAULT_URL, enrich_articles_with_content, fetch_articles
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Format de sortie.",
     )
     parser.add_argument(
+        "--with-content",
+        action="store_true",
+        help="Recupere aussi le contenu public de chaque article via l'API NHK.",
+    )
+    parser.add_argument(
         "--output",
         "-o",
         type=Path,
@@ -49,12 +54,17 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def article_to_dict(article: Article) -> dict[str, str | None]:
+def article_to_dict(article: Article) -> dict[str, str | bool | None]:
     return {
         "title": article.title,
         "published_at": article.published_at,
+        "date_published": article.date_published,
+        "date_modified": article.date_modified,
         "url": article.url,
+        "api_url": article.api_url,
         "image_url": article.image_url,
+        "content": article.content,
+        "content_is_truncated": article.content_is_truncated,
     }
 
 
@@ -67,7 +77,17 @@ def format_csv(articles: Iterable[Article]) -> str:
     buffer = io.StringIO()
     writer = csv.DictWriter(
         buffer,
-        fieldnames=("title", "published_at", "url", "image_url"),
+        fieldnames=(
+            "title",
+            "published_at",
+            "date_published",
+            "date_modified",
+            "url",
+            "api_url",
+            "image_url",
+            "content",
+            "content_is_truncated",
+        ),
         lineterminator="\n",
     )
     writer.writeheader()
@@ -86,6 +106,9 @@ def format_table(articles: list[Article]) -> str:
         title = article.title or "(sans titre)"
         lines.append(f"{index:02d}. {published} | {title}")
         lines.append(f"    {article.url}")
+        if article.content:
+            suffix = "..." if article.content_is_truncated else ""
+            lines.append(f"    {article.content}{suffix}")
     return "\n".join(lines)
 
 
@@ -118,6 +141,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.limit < 0:
             parser.error("--limit doit etre positif.")
         articles = articles[: args.limit]
+
+    if args.with_content:
+        try:
+            articles = enrich_articles_with_content(articles, timeout=args.timeout)
+        except Exception as exc:  # pragma: no cover - exact urllib errors vary.
+            print(f"Erreur pendant la recuperation du contenu NHK: {exc}", file=sys.stderr)
+            return 1
 
     rendered = render_articles(articles, args.format)
     if args.output:

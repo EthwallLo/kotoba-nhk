@@ -31,6 +31,23 @@ Exporter en CSV :
 python main.py --format csv --output articles.csv
 ```
 
+Recuperer aussi le contenu public expose par NHK pour chaque article :
+
+```powershell
+python main.py --limit 5 --with-content
+```
+
+Le script tente d'abord d'obtenir le jeton `accountless` utilise par le site NHK
+pour lire `articleBody`. Si ce jeton n'est pas disponible, il revient au resume
+public. Dans les sorties JSON et CSV, `content_is_truncated` indique ce fallback
+tronque.
+
+En JSON avec contenu :
+
+```powershell
+python main.py --limit 5 --with-content --format json --output articles.json
+```
+
 ## Installation optionnelle
 
 ```powershell

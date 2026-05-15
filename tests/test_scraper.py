@@ -1,6 +1,12 @@
 import unittest
 
-from nhk_articles.scraper import normalize_article_url, parse_articles
+from nhk_articles.scraper import (
+    Article,
+    build_article_api_url,
+    normalize_article_url,
+    parse_articles,
+    update_article_from_detail,
+)
 
 
 class ScraperTests(unittest.TestCase):
@@ -48,6 +54,80 @@ class ScraperTests(unittest.TestCase):
         self.assertIsNone(
             normalize_article_url("https://example.com/newsweb/na/na-k1", "https://news.web.nhk/newsweb")
         )
+
+    def test_build_article_api_url(self) -> None:
+        self.assertEqual(
+            build_article_api_url("https://news.web.nhk/newsweb/na/na-k10015122111000"),
+            "https://api.web.nhk/r8/t/newsarticle/na/na-k10015122111000.json",
+        )
+
+    def test_update_article_from_detail(self) -> None:
+        article = Article(
+            title="Ancien titre",
+            url="https://news.web.nhk/newsweb/na/na-k10015122111000",
+        )
+        payload = {
+            "headline": {"@value": "Titre detaille"},
+            "abstract": "Premier paragraphe.\n\nDeuxieme paragraphe.",
+            "canonical": "https://news.web.nhk/newsweb/na/na-k10015122111000",
+            "datePublished": "2026-05-15T05:31:00+09:00",
+            "dateModified": "2026-05-15T05:45:00+09:00",
+            "image": [{"url": "https://imgu.web.nhk/news/example.jpg"}],
+        }
+
+        updated = update_article_from_detail(
+            article,
+            payload,
+            "https://api.web.nhk/r8/t/newsarticle/na/na-k10015122111000.json",
+        )
+
+        self.assertEqual(updated.title, "Titre detaille")
+        self.assertEqual(updated.content, "Premier paragraphe.\n\nDeuxieme paragraphe.")
+        self.assertFalse(updated.content_is_truncated)
+        self.assertEqual(updated.date_published, "2026-05-15T05:31:00+09:00")
+        self.assertEqual(updated.date_modified, "2026-05-15T05:45:00+09:00")
+        self.assertEqual(updated.image_url, "https://imgu.web.nhk/news/example.jpg")
+        self.assertEqual(
+            updated.api_url,
+            "https://api.web.nhk/r8/t/newsarticle/na/na-k10015122111000.json",
+        )
+
+    def test_update_article_flags_truncated_abstracts(self) -> None:
+        article = Article(
+            title="Titre",
+            url="https://news.web.nhk/newsweb/na/na-k10015122111000",
+        )
+        payload = {"abstract": "x" * 100}
+
+        updated = update_article_from_detail(
+            article,
+            payload,
+            "https://api.web.nhk/r8/t/newsarticle/na/na-k10015122111000.json",
+        )
+
+        self.assertTrue(updated.content_is_truncated)
+
+    def test_article_body_is_preferred_over_abstract(self) -> None:
+        article = Article(
+            title="Titre",
+            url="https://news.web.nhk/newsweb/na/na-k10015122111000",
+        )
+        payload = {
+            "abstract": "x" * 100,
+            "articleBody": "Premier paragraphe.\n\nDeuxieme paragraphe complet.",
+        }
+
+        updated = update_article_from_detail(
+            article,
+            payload,
+            "https://api.web.nhk/r8/t/newsarticle/na/na-k10015122111000.json",
+        )
+
+        self.assertEqual(
+            updated.content,
+            "Premier paragraphe.\n\nDeuxieme paragraphe complet.",
+        )
+        self.assertFalse(updated.content_is_truncated)
 
 
 if __name__ == "__main__":
